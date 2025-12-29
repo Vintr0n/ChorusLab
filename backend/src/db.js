@@ -4,7 +4,7 @@ import fs from "fs";
 
 const DB_PATH =
   process.env.SQLITE_PATH ||
-  path.join(process.cwd(), "data", "projects.db");
+  path.join("/tmp", "projects.db");
 
 const DB_DIR = path.dirname(DB_PATH);
 
