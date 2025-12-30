@@ -224,25 +224,19 @@ export default function App() {
   }, []);
 
   // Initialize Audio Context
-  const initAudio = () => {
+const initAudio = async () => {
+  if (!audioContextRef.current) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioContextRef.current = new AudioContext();
+    analyserRef.current = audioContextRef.current.createAnalyser();
+    analyserRef.current.fftSize = 256;
+  }
 
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 256;
-    } else if (audioContextRef.current.state === "suspended") {
-      audioContextRef.current.resume();
-    }
+  if (audioContextRef.current.state === "suspended") {
+    await audioContextRef.current.resume();
+  }
+};
 
-    // (Re)bind analyser to the current <audio> element when needed.
-    // We change the <audio> element key when a new audio file is loaded, so we must recreate the source node.
-    if (audioRef.current && audioContextRef.current && analyserRef.current && !sourceRef.current) {
-      sourceRef.current = audioContextRef.current.createMediaElementSource(audioRef.current);
-      sourceRef.current.connect(analyserRef.current);
-      analyserRef.current.connect(audioContextRef.current.destination);
-    }
-  };
 
   // --- Handlers ---
   // (changed) convert to base64 and store payload instead of URL string
@@ -743,9 +737,13 @@ export default function App() {
 
     const canvasStream = canvasRef.current.captureStream(30);
 
-    const dest = audioContextRef.current.createMediaStreamDestination();
-    sourceRef.current.connect(dest);
-    sourceRef.current.connect(audioContextRef.current.destination);
+const dest = audioContextRef.current.createMediaStreamDestination();
+
+sourceRef.current.disconnect();
+sourceRef.current.connect(analyserRef.current);
+sourceRef.current.connect(dest);
+analyserRef.current.connect(audioContextRef.current.destination);
+
 
     const audioTrack = dest.stream.getAudioTracks()[0];
     const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), audioTrack]);
@@ -1213,14 +1211,25 @@ export default function App() {
           </div>
 
           {/* Hidden media elements used by logic (src changed to derived urls) */}
-          <audio
-            key={audioElementKey}
-            ref={audioRef}
-            src={audioUrl}
-            onTimeUpdate={handleTimeUpdate}
-            onEnded={() => setIsPlaying(false)}
-            className="hidden"
-          />
+<audio
+  key={audioElementKey}
+  ref={audioRef}
+  src={audioUrl}
+  onLoadedMetadata={() => {
+    if (!audioContextRef.current) return;
+    if (sourceRef.current) return;
+
+    sourceRef.current =
+      audioContextRef.current.createMediaElementSource(audioRef.current);
+
+    sourceRef.current.connect(analyserRef.current);
+    analyserRef.current.connect(audioContextRef.current.destination);
+  }}
+  onTimeUpdate={handleTimeUpdate}
+  onEnded={() => setIsPlaying(false)}
+  className="hidden"
+/>
+
           <video
             ref={bgVideoRef}
             src={bgUrl}
